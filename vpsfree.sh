@@ -7,102 +7,141 @@ NC='\033[0m'
 
 echo "
 #######################################################################################
+#
 #                                  VPSFREE.ES SCRIPTS
+#
+#                             Adapted for n8n + XRDP by ChatGPT
+#
 #######################################################################################"
-
 echo "Select an option:"
-echo "1) XFCE4 Minimal - XRDP (Permanent Settings Server Fix)"
+echo "1) LXDE - XRDP"
 echo "2) PufferPanel"
 echo "3) Install Basic Packages"
 echo "4) Install Nodejs"
+echo "5) n8n - XRDP"
 read option
 
-if [ "$option" -eq 1 ]; then
+if [ $option -eq 1 ]; then
     clear
-    echo -e "${RED}Installing XFCE4 minimal + XRDP...${NC}"
+    echo -e "${RED}Downloading... Please Wait${NC}"
     apt update && apt upgrade -y
     export SUDO_FORCE_REMOVE=yes
     apt remove sudo -y
-    apt install -y xfce4 xfce4-goodies xrdp dbus-x11 policykit-1 gvfs
-
-    # Garante diretório do usuário
-    mkdir -p /run/user/$(id -u)
-    chmod 700 /run/user/$(id -u)
-    chown $(whoami):$(whoami) /run/user/$(id -u)
-
-    # Configuração definitiva do XRDP
-    cat <<'EOF' > /etc/xrdp/startwm.sh
-#!/bin/bash
-unset DBUS_SESSION_BUS_ADDRESS
-unset DBUS_SESSION_BUS_PID
-export XDG_CURRENT_DESKTOP=XFCE
-
-USER_ID=$(id -u)
-RUNDIR="/run/user/${USER_ID}"
-mkdir -p "$RUNDIR"
-chmod 700 "$RUNDIR"
-chown $(whoami):$(whoami) "$RUNDIR"
-
-# Cria um D-Bus de sessão se não existir
-if [ ! -S "$RUNDIR/bus" ]; then
-    dbus-daemon --fork --session --address=unix:path=$RUNDIR/bus
-fi
-export DBUS_SESSION_BUS_ADDRESS="unix:path=$RUNDIR/bus"
-
-exec startxfce4
-EOF
-    chmod +x /etc/xrdp/startwm.sh
-
-    echo -e "${YELLOW}Select RDP port:${NC}"
+    apt install -y lxde xrdp
+    echo "lxsession -s LXDE -e LXDE" >> /etc/xrdp/startwm.sh
+    clear
+    echo -e "${GREEN}Installation complete!${NC}"
+    echo -e "${YELLOW}Select RDP Port:${NC}"
     read selectedPort
-    sed -i "s/port=3389/port=${selectedPort}/g" /etc/xrdp/xrdp.ini
-
-    service dbus restart
+    sed -i "s/port=3389/port=$selectedPort/g" /etc/xrdp/xrdp.ini
     service xrdp restart
-
     clear
-    echo -e "${GREEN}✔ XRDP running on port ${selectedPort}"
-    echo -e "✔ XFCE4 configured — Settings-Server error permanently fixed${NC}"
+    echo -e "${GREEN}RDP Created And Started on Port $selectedPort${NC}"
 
-elif [ "$option" -eq 2 ]; then
+elif [ $option -eq 2 ]; then
     clear
-    echo -e "${RED}Installing PufferPanel...${NC}"
+    echo -e "${RED}Downloading... Please Wait${NC}"
     apt update && apt upgrade -y
     export SUDO_FORCE_REMOVE=yes
     apt remove sudo -y
     apt install -y curl wget git python3
     curl -s https://packagecloud.io/install/repositories/pufferpanel/pufferpanel/script.deb.sh | bash
-    apt update && apt install -y pufferpanel
+    apt update && apt upgrade -y
     curl -o /bin/systemctl https://raw.githubusercontent.com/gdraheim/docker-systemctl-replacement/master/files/docker/systemctl3.py
-    chmod +x /bin/systemctl
-
-    echo -e "${YELLOW}Enter PufferPanel port:${NC}"
-    read pport
-    sed -i "s/\"host\": \"0.0.0.0:8080\"/\"host\": \"0.0.0.0:${pport}\"/" /etc/pufferpanel/config.json
-
-    echo -e "${YELLOW}Admin username:${NC}"; read u
-    echo -e "${YELLOW}Admin password:${NC}"; read p
-    echo -e "${YELLOW}Admin email:${NC}"; read e
-    pufferpanel user add --name "$u" --password "$p" --email "$e" --admin
-
+    chmod 777 /bin/systemctl
+    apt install -y pufferpanel
+    clear
+    echo -e "${GREEN}PufferPanel installation completed!${NC}"
+    echo -e "${YELLOW}Enter PufferPanel Port:${NC}"
+    read pufferPanelPort
+    sed -i "s/\"host\": \"0.0.0.0:8080\"/\"host\": \"0.0.0.0:$pufferPanelPort\"/g" /etc/pufferpanel/config.json
+    echo -e "${YELLOW}Enter admin username:${NC}"
+    read adminUsername
+    echo -e "${YELLOW}Enter admin password:${NC}"
+    read adminPassword
+    echo -e "${YELLOW}Enter admin email:${NC}"
+    read adminEmail
+    pufferpanel user add --name "$adminUsername" --password "$adminPassword" --email "$adminEmail" --admin
     systemctl restart pufferpanel
-    echo -e "${GREEN}PufferPanel running on port ${pport}${NC}"
+    clear
+    echo -e "${GREEN}PufferPanel Started on Port $pufferPanelPort${NC}"
 
-elif [ "$option" -eq 3 ]; then
+elif [ $option -eq 3 ]; then
+    clear
+    echo -e "${RED}Installing basic packages...${NC}"
     apt update && apt upgrade -y
     apt install -y git curl wget sudo lsof iputils-ping
     curl -o /bin/systemctl https://raw.githubusercontent.com/gdraheim/docker-systemctl-replacement/master/files/docker/systemctl3.py
-    chmod +x /bin/systemctl
-    echo -e "${GREEN}Basic packages installed.${NC}"
+    chmod 777 /bin/systemctl
+    clear
+    echo -e "${GREEN}Basic Packages Installed!${NC}"
+    echo -e "${RED}sudo / curl / wget / git / lsof / ping${NC}"
 
-elif [ "$option" -eq 4 ]; then
-    echo "Choose Node.js version (12–20):"
-    read version
+elif [ $option -eq 4 ]; then
+    clear
+    echo "Choose a Node.js version to install:"
+    echo "1. 12.x"
+    echo "2. 14.x"
+    echo "3. 16.x"
+    echo "4. 18.x"
+    echo "5. 20.x"
+    read -p "Enter choice (1-5): " choice
+    case $choice in
+        1) version="12";;
+        2) version="14";;
+        3) version="16";;
+        4) version="18";;
+        5) version="20";;
+        *) echo "Invalid choice."; exit 1;;
+    esac
     apt remove --purge -y node* nodejs npm
-    apt update -y && apt install -y curl
+    apt update && apt install -y curl
     curl -fsSL https://deb.nodesource.com/setup_${version}.x | bash -
     apt install -y nodejs
-    echo -e "${GREEN}Node.js ${version}.x installed.${NC}"
+    clear
+    echo -e "${GREEN}Node.js v${version}.x installed.${NC}"
+
+elif [ $option -eq 5 ]; then
+    clear
+    echo -e "${RED}Installing n8n + XRDP environment...${NC}"
+    apt update && apt upgrade -y
+    apt install -y lxde xrdp curl git build-essential
+    echo "lxsession -s LXDE -e LXDE" >> /etc/xrdp/startwm.sh
+
+    echo -e "${YELLOW}Installing Node.js 20.x (required for n8n)...${NC}"
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
+    apt install -y nodejs
+
+    echo -e "${YELLOW}Installing n8n globally...${NC}"
+    npm install -g n8n
+
+    echo -e "${YELLOW}Creating n8n service...${NC}"
+    cat <<EOF >/etc/systemd/system/n8n.service
+[Unit]
+Description=n8n Automation
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/n8n start
+Restart=on-failure
+User=root
+Environment=PORT=5678
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    systemctl daemon-reload
+    systemctl enable n8n
+    systemctl start n8n
+
+    clear
+    echo -e "${GREEN}n8n + XRDP successfully installed!${NC}"
+    echo -e "${YELLOW}Access RDP on port 3389 (or edit in /etc/xrdp/xrdp.ini).${NC}"
+    echo -e "${YELLOW}n8n is running on http://<your-server-ip>:5678${NC}"
+
 else
-    echo -e "${RED}Invalid option.${NC}"
+    echo -e "${RED}Invalid option selected.${NC}"
 fi
