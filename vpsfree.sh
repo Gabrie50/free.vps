@@ -7,16 +7,11 @@ NC='\033[0m'
 
 echo "
 #######################################################################################
-#
 #                                  VPSFREE.ES SCRIPTS
-#
-#                           Copyright (C) 2022 - 2023, VPSFREE.ES
-#
-#
 #######################################################################################"
 
 echo "Select an option:"
-echo "1) XFCE4 Minimal - XRDP (Fixed Settings Server Error)"
+echo "1) XFCE4 Minimal - XRDP (Permanent Settings Server Fix)"
 echo "2) PufferPanel"
 echo "3) Install Basic Packages"
 echo "4) Install Nodejs"
@@ -24,140 +19,90 @@ read option
 
 if [ "$option" -eq 1 ]; then
     clear
-    echo -e "${RED}Downloading... Please Wait"
+    echo -e "${RED}Installing XFCE4 minimal + XRDP...${NC}"
     apt update && apt upgrade -y
-
-    # Remover sudo como no script original
     export SUDO_FORCE_REMOVE=yes
     apt remove sudo -y
+    apt install -y xfce4 xfce4-goodies xrdp dbus-x11 policykit-1 gvfs
 
-    # Instalar XFCE4 minimal e dependências
-    apt install xfce4 xfce4-goodies xrdp dbus-x11 -y
-
-    # Corrigir problemas de DBus / Settings Server
-    mkdir -p /run/user/$(id -u)
-    chown $(whoami):$(whoami) /run/user/$(id -u)
-
-    # Corrigir configuração do XRDP
-    cat <<'EOF' > /etc/xrdp/startwm.sh
-#!/bin/bash
-unset DBUS_SESSION_BUS_PID
-unset DBUS_SESSION_BUS_ADDRESS
-export XDG_CURRENT_DESKTOP=XFCE
-
-if [ ! -d /run/user/$(id -u) ]; then
+    # Garante diretório do usuário
     mkdir -p /run/user/$(id -u)
     chmod 700 /run/user/$(id -u)
     chown $(whoami):$(whoami) /run/user/$(id -u)
-fi
 
-if ! pgrep -u $(whoami) dbus-daemon > /dev/null 2>&1; then
-    dbus-daemon --session --address=unix:path=/run/user/$(id -u)/bus &
-    export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
+    # Configuração definitiva do XRDP
+    cat <<'EOF' > /etc/xrdp/startwm.sh
+#!/bin/bash
+unset DBUS_SESSION_BUS_ADDRESS
+unset DBUS_SESSION_BUS_PID
+export XDG_CURRENT_DESKTOP=XFCE
+
+USER_ID=$(id -u)
+RUNDIR="/run/user/${USER_ID}"
+mkdir -p "$RUNDIR"
+chmod 700 "$RUNDIR"
+chown $(whoami):$(whoami) "$RUNDIR"
+
+# Cria um D-Bus de sessão se não existir
+if [ ! -S "$RUNDIR/bus" ]; then
+    dbus-daemon --fork --session --address=unix:path=$RUNDIR/bus
 fi
+export DBUS_SESSION_BUS_ADDRESS="unix:path=$RUNDIR/bus"
 
 exec startxfce4
 EOF
-
     chmod +x /etc/xrdp/startwm.sh
 
-    clear
-    echo -e "${GREEN}XFCE4 minimal + XRDP installation completed!"
-    echo -e "${YELLOW}Select RDP Port"
+    echo -e "${YELLOW}Select RDP port:${NC}"
     read selectedPort
+    sed -i "s/port=3389/port=${selectedPort}/g" /etc/xrdp/xrdp.ini
 
-    sed -i "s/port=3389/port=$selectedPort/g" /etc/xrdp/xrdp.ini
-    clear
-
-    # Reiniciar serviços no ambiente sem systemd
     service dbus restart
     service xrdp restart
 
     clear
-    echo -e "${GREEN}RDP Created And Started on Port $selectedPort"
-    echo -e "${GREEN}XFCE4 configured with DBus fix — 'Unable to contact settings server' issue resolved!${NC}"
+    echo -e "${GREEN}✔ XRDP running on port ${selectedPort}"
+    echo -e "✔ XFCE4 configured — Settings-Server error permanently fixed${NC}"
 
 elif [ "$option" -eq 2 ]; then
     clear
-    echo -e "${RED}Downloading... Please Wait"
+    echo -e "${RED}Installing PufferPanel...${NC}"
     apt update && apt upgrade -y
     export SUDO_FORCE_REMOVE=yes
     apt remove sudo -y
-    apt install curl wget git python3 -y
+    apt install -y curl wget git python3
     curl -s https://packagecloud.io/install/repositories/pufferpanel/pufferpanel/script.deb.sh | bash
-    apt update && apt upgrade -y
+    apt update && apt install -y pufferpanel
     curl -o /bin/systemctl https://raw.githubusercontent.com/gdraheim/docker-systemctl-replacement/master/files/docker/systemctl3.py
-    chmod -R 777 /bin/systemctl
-    apt install pufferpanel -y
-    clear
-    echo -e "${GREEN}PufferPanel installation completed!"
-    echo -e "${YELLOW}Enter PufferPanel Port"
-    read pufferPanelPort
+    chmod +x /bin/systemctl
 
-    sed -i "s/\"host\": \"0.0.0.0:8080\"/\"host\": \"0.0.0.0:$pufferPanelPort\"/g" /etc/pufferpanel/config.json
-    echo -e "${YELLOW}Enter the username for the admin user:"
-    read adminUsername
-    echo -e "${YELLOW}Enter the password for the admin user:"
-    read adminPassword
-    echo -e "${YELLOW}Enter the email for the admin user:"
-    read adminEmail
+    echo -e "${YELLOW}Enter PufferPanel port:${NC}"
+    read pport
+    sed -i "s/\"host\": \"0.0.0.0:8080\"/\"host\": \"0.0.0.0:${pport}\"/" /etc/pufferpanel/config.json
 
-    pufferpanel user add --name "$adminUsername" --password "$adminPassword" --email "$adminEmail" --admin
-    clear
-    echo -e "${GREEN}Admin user $adminUsername added successfully!${NC}"
+    echo -e "${YELLOW}Admin username:${NC}"; read u
+    echo -e "${YELLOW}Admin password:${NC}"; read p
+    echo -e "${YELLOW}Admin email:${NC}"; read e
+    pufferpanel user add --name "$u" --password "$p" --email "$e" --admin
+
     systemctl restart pufferpanel
-    clear
-    echo -e "${GREEN}PufferPanel Created & Started - PORT: ${NC}$pufferPanelPort${GREEN}"
+    echo -e "${GREEN}PufferPanel running on port ${pport}${NC}"
 
 elif [ "$option" -eq 3 ]; then
-    clear
-    echo -e "${RED}Downloading... Please Wait"
     apt update && apt upgrade -y
-    apt install git curl wget sudo lsof iputils-ping -y
+    apt install -y git curl wget sudo lsof iputils-ping
     curl -o /bin/systemctl https://raw.githubusercontent.com/gdraheim/docker-systemctl-replacement/master/files/docker/systemctl3.py
-    chmod -R 777 /bin/systemctl
-    clear
-    echo -e "${GREEN}Basic Packages Installed!"
-    echo -e "${RED}sudo / curl / wget / git / lsof / ping"
+    chmod +x /bin/systemctl
+    echo -e "${GREEN}Basic packages installed.${NC}"
 
 elif [ "$option" -eq 4 ]; then
-    echo "Choose a Node.js version to install:"
-    echo "1. 12.x"
-    echo "2. 13.x"
-    echo "3. 14.x"
-    echo "4. 15.x"
-    echo "5. 16.x"
-    echo "6. 17.x"
-    echo "7. 18.x"
-    echo "8. 19.x"
-    echo "9. 20.x"
-
-    read -p "Enter your choice (1-9): " choice
-
-    case $choice in
-        1) version="12" ;;
-        2) version="13" ;;
-        3) version="14" ;;
-        4) version="15" ;;
-        5) version="16" ;;
-        6) version="17" ;;
-        7) version="18" ;;
-        8) version="19" ;;
-        9) version="20" ;;
-        *) echo "Invalid choice. Exiting."; exit 1 ;;
-    esac
-
-    echo -e "${RED}Downloading... Please Wait"
-    apt remove --purge node* nodejs npm -y
-    apt update && apt upgrade -y && apt install curl -y
-    curl -sL "https://deb.nodesource.com/setup_${version}.x" -o /tmp/nodesource_setup.sh
-    bash /tmp/nodesource_setup.sh
-    apt update -y
+    echo "Choose Node.js version (12–20):"
+    read version
+    apt remove --purge -y node* nodejs npm
+    apt update -y && apt install -y curl
+    curl -fsSL https://deb.nodesource.com/setup_${version}.x | bash -
     apt install -y nodejs
-    clear
-    echo -e "${GREEN}Node.js version $version has been installed."
-
+    echo -e "${GREEN}Node.js ${version}.x installed.${NC}"
 else
-    echo -e "${RED}Invalid option selected.${NC}"
+    echo -e "${RED}Invalid option.${NC}"
 fi
-
