@@ -16,13 +16,13 @@ echo "
 #######################################################################################"
 
 echo "Select an option:"
-echo "1) XFCE4 Minimal - XRDP"
+echo "1) XFCE4 Minimal - XRDP (Fixed Settings Server Error)"
 echo "2) PufferPanel"
 echo "3) Install Basic Packages"
 echo "4) Install Nodejs"
 read option
 
-if [ $option -eq 1 ]; then
+if [ "$option" -eq 1 ]; then
     clear
     echo -e "${RED}Downloading... Please Wait"
     apt update && apt upgrade -y
@@ -31,11 +31,34 @@ if [ $option -eq 1 ]; then
     export SUDO_FORCE_REMOVE=yes
     apt remove sudo -y
 
-    # Instalar XFCE4 minimal
-    apt install xfce4 xfce4-goodies xrdp -y
+    # Instalar XFCE4 minimal e dependências
+    apt install xfce4 xfce4-goodies xrdp dbus-x11 -y
 
-    # Configurar XRDP para iniciar XFCE4
-    echo "startxfce4" > /etc/xrdp/startwm.sh
+    # Corrigir problemas de DBus / Settings Server
+    mkdir -p /run/user/$(id -u)
+    chown $(whoami):$(whoami) /run/user/$(id -u)
+
+    # Corrigir configuração do XRDP
+    cat <<'EOF' > /etc/xrdp/startwm.sh
+#!/bin/bash
+unset DBUS_SESSION_BUS_PID
+unset DBUS_SESSION_BUS_ADDRESS
+export XDG_CURRENT_DESKTOP=XFCE
+
+if [ ! -d /run/user/$(id -u) ]; then
+    mkdir -p /run/user/$(id -u)
+    chmod 700 /run/user/$(id -u)
+    chown $(whoami):$(whoami) /run/user/$(id -u)
+fi
+
+if ! pgrep -u $(whoami) dbus-daemon > /dev/null 2>&1; then
+    dbus-daemon --session --address=unix:path=/run/user/$(id -u)/bus &
+    export DBUS_SESSION_BUS_ADDRESS="unix:path=/run/user/$(id -u)/bus"
+fi
+
+exec startxfce4
+EOF
+
     chmod +x /etc/xrdp/startwm.sh
 
     clear
@@ -45,11 +68,16 @@ if [ $option -eq 1 ]; then
 
     sed -i "s/port=3389/port=$selectedPort/g" /etc/xrdp/xrdp.ini
     clear
+
+    # Reiniciar serviços no ambiente sem systemd
+    service dbus restart
     service xrdp restart
+
     clear
     echo -e "${GREEN}RDP Created And Started on Port $selectedPort"
+    echo -e "${GREEN}XFCE4 configured with DBus fix — 'Unable to contact settings server' issue resolved!${NC}"
 
-elif [ $option -eq 2 ]; then
+elif [ "$option" -eq 2 ]; then
     clear
     echo -e "${RED}Downloading... Please Wait"
     apt update && apt upgrade -y
@@ -81,7 +109,7 @@ elif [ $option -eq 2 ]; then
     clear
     echo -e "${GREEN}PufferPanel Created & Started - PORT: ${NC}$pufferPanelPort${GREEN}"
 
-elif [ $option -eq 3 ]; then
+elif [ "$option" -eq 3 ]; then
     clear
     echo -e "${RED}Downloading... Please Wait"
     apt update && apt upgrade -y
@@ -89,10 +117,10 @@ elif [ $option -eq 3 ]; then
     curl -o /bin/systemctl https://raw.githubusercontent.com/gdraheim/docker-systemctl-replacement/master/files/docker/systemctl3.py
     chmod -R 777 /bin/systemctl
     clear
-    echo -e "${GREEN}Basic Packages Installed!" 
+    echo -e "${GREEN}Basic Packages Installed!"
     echo -e "${RED}sudo / curl / wget / git / lsof / ping"
 
-elif [ $option -eq 4 ]; then
+elif [ "$option" -eq 4 ]; then
     echo "Choose a Node.js version to install:"
     echo "1. 12.x"
     echo "2. 13.x"
@@ -132,3 +160,4 @@ elif [ $option -eq 4 ]; then
 else
     echo -e "${RED}Invalid option selected.${NC}"
 fi
+
